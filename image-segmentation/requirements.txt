@@ -1,0 +1,9 @@
+roboflow
+ultralytics
+python-dotenv
+torch
+numpy
+Pillow
+opencv-python
+shapely
+pywebview
