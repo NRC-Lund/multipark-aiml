@@ -17,17 +17,19 @@ def main():
     args = parser.parse_args()
 
     # Check GPU
-    if not args.device:
-        if torch.cuda.is_available():
-            device = torch.device("cuda")   # Use CUDA if available
-        else:
-            if torch.backends.mps.is_available():
-                device = torch.device("mps")   # Use MPS if available
-            else:
-                device = torch.device("cpu")   # Use CPU if no other device is available
-    else:
-        device = torch.device(args.device)
-    print("Using device:", device)
+    #if not args.device:
+    #    if torch.cuda.is_available():
+    #        device = torch.device("cuda")   # Use CUDA if available
+    #    else:
+    #        if torch.backends.mps.is_available():
+    #            device = torch.device("mps")   # Use MPS if available
+    #        else:
+    #            device = torch.device("cpu")   # Use CPU if no other device is available
+    #else:
+    #    device = torch.device(args.device)
+    #print("Using device:", device)
+
+    print("Cuda:", torch.cuda.is_available())
 
     # Load model
     print("Initializing model...")
@@ -45,7 +47,7 @@ def main():
         epochs=args.epochs,
         imgsz=args.imgsz,
         batch=args.batch,
-        device=args.device
+        device=0
     )
 
     return results.save_dir
