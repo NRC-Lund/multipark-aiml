@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 import argparse
 import json
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, shape, Point
 
 @dataclass
 class VisualizationConfig:
@@ -142,7 +142,7 @@ def polygon_nms(results, iou_threshold=0.5):
         results = filtered
     return keep
 
-def run_sliding_window_inference(model_path, image_path, window_config: SlidingWindowConfig, vis_config: VisualizationConfig = None):
+def run_sliding_window_inference(model_path, image_path, window_config: SlidingWindowConfig, vis_config: VisualizationConfig = None, polygon_mask=None):
     """
     Run inference using a sliding window approach for large images
     
@@ -151,9 +151,10 @@ def run_sliding_window_inference(model_path, image_path, window_config: SlidingW
         image_path (str): Path to the image to process
         window_config: SlidingWindowConfig object with window parameters
         vis_config: VisualizationConfig object controlling what to draw
+        polygon_mask: Shapely Polygon object representing the mask
     
     Returns:
-        tuple: (image with detections, combined results, contours, confidences)
+        tuple: (image with detections, combined results)
     """
     # Load the model
     model = YOLO(model_path)
@@ -244,6 +245,10 @@ def run_sliding_window_inference(model_path, image_path, window_config: SlidingW
     # Remove duplicate detections
     fused_results = polygon_nms(all_results, iou_threshold=0.4)
 
+    # Remove detections outside the mask
+    if polygon_mask:
+        fused_results = [result for result in fused_results if is_within_polygon(result['box'], polygon_mask)]
+
     # Visualize results
     img_with_detections = visualize_detections(image, fused_results, vis_config)
     
@@ -297,7 +302,46 @@ def convert_yolo_to_dict(result):
     
     return results_dict
 
-def run_inference(model_path, image_path, conf_threshold=0.25, vis_config: VisualizationConfig = None):
+def load_geojson_mask(geojson_path):
+    """
+    Load a GeoJSON file and extract the polygon mask.
+    
+    Args:
+        geojson_path (str): Path to the GeoJSON file.
+    
+    Returns:
+        Polygon: Shapely Polygon object representing the mask.
+    """
+    with open(geojson_path) as f:
+        geojson_data = json.load(f)
+    
+    if not geojson_data['features']:
+        raise ValueError("GeoJSON does not contain valid features.")
+    
+    # Assuming the first feature contains the polygon mask
+    polygon = shape(geojson_data['features'][0]['geometry'])
+    
+    if not polygon.is_valid:
+        raise ValueError("The polygon in the GeoJSON is not valid.")
+    
+    return polygon
+
+def is_within_polygon(box, polygon):
+    """
+    Check if the bounding box is within the polygon.
+    
+    Args:
+        box (list): Bounding box coordinates [x1, y1, x2, y2].
+        polygon (Polygon): Shapely Polygon object.
+    
+    Returns:
+        bool: True if the bounding box is within the polygon, False otherwise.
+    """
+    # Create a rectangle from the bounding box
+    rect = Polygon([(box[0], box[1]), (box[2], box[1]), (box[2], box[3]), (box[0], box[3])])
+    return polygon.contains(rect)
+
+def run_inference(model_path, image_path, conf_threshold=0.25, vis_config: VisualizationConfig = None, polygon_mask=None):
     """
     Run inference using a YOLO model
     
@@ -306,6 +350,7 @@ def run_inference(model_path, image_path, conf_threshold=0.25, vis_config: Visua
         image_path (str): Path to the image to process
         conf_threshold (float): Confidence threshold for detections
         vis_config: VisualizationConfig object controlling what to draw
+        polygon_mask: Shapely Polygon object representing the mask
     
     Returns:
         tuple: (image with detections, results)
@@ -327,6 +372,10 @@ def run_inference(model_path, image_path, conf_threshold=0.25, vis_config: Visua
     
     # Convert results to dictionary format
     results_dict = convert_yolo_to_dict(results[0])
+    
+    # Filter results based on the polygon mask
+    if polygon_mask:
+        results_dict = [result for result in results_dict if is_within_polygon(result['box'], polygon_mask)]
     
     # Visualize results
     img_with_detections = visualize_detections(image, results_dict, vis_config)
@@ -430,6 +479,7 @@ def main():
     parser.add_argument('--mask-alpha', type=float, default=0.3, help='Transparency for filled masks')
     parser.add_argument('--save-image', action='store_true', help='Save visualization image')
     parser.add_argument('--save-geojson', action='store_true', help='Save results in GeoJSON format')
+    parser.add_argument('--geojson-mask', type=str, help='Path to GeoJSON file defining a polygon mask')
     
     args = parser.parse_args()
     
@@ -465,6 +515,11 @@ def main():
         print("Error: No valid input images found")
         return
     
+    # Load the polygon mask if provided
+    polygon_mask = None
+    if args.geojson_mask:
+        polygon_mask = load_geojson_mask(args.geojson_mask)
+
     try:
         for input_image in input_images:
             print(f"\nProcessing {input_image}...")
@@ -480,12 +535,13 @@ def main():
                     conf_threshold=args.conf
                 )
                 
-                # Run sliding window inference
+                # Run sliding window inference with polygon mask
                 img_with_detections, results = run_sliding_window_inference(
                     model_path=args.model,
                     image_path=input_image,
                     window_config=window_config,
-                    vis_config=vis_config
+                    vis_config=vis_config,
+                    polygon_mask=polygon_mask
                 )
                 
                 # Load the image for shape information
@@ -496,18 +552,23 @@ def main():
                 contours = None
                 confidence_mask = None
                 
+                # Filter results based on the polygon mask
+                if polygon_mask:
+                    all_results = [result for result in results if is_within_polygon(result['box'], polygon_mask)]
+                
             else:
                 # Run regular inference
                 img_with_detections, results = run_inference(
                     model_path=args.model,
                     image_path=input_image,
                     conf_threshold=args.conf,
-                    vis_config=vis_config
+                    vis_config=vis_config,
+                    polygon_mask=polygon_mask
                 )
                 image = cv2.imread(input_image)
                 contours = None
                 confidence_mask = None
-            
+                
             # Save results based on flags
             if args.save_geojson:
                 geojson_path = os.path.join(args.output_path, f"{base_name}.geojson")
