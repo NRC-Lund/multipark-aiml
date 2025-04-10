@@ -27,14 +27,15 @@ class SlidingWindowConfig:
     overlap: int = 128  # Overlap between windows
     conf_threshold: float = 0.25  # Confidence threshold for detections
 
-def visualize_detections(image, results, config: VisualizationConfig = None):
+def visualize_detections(image, results, config: VisualizationConfig = None, polygon_mask=None):
     """
-    Visualize detection results from YOLO model
+    Visualize detection results from YOLO model and optionally draw the polygon mask.
     
     Args:
         image: Input image
         results: List of dictionaries containing detection results
         config: VisualizationConfig object controlling what to draw
+        polygon_mask: Shapely Polygon object representing the mask
     """
     if config is None:
         config = VisualizationConfig()
@@ -42,11 +43,13 @@ def visualize_detections(image, results, config: VisualizationConfig = None):
     # Create a copy of the image to draw on
     img = image.copy()
     
-    # Convert to grayscale if no_colors is True
-    if config.no_colors:
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)  # Convert back to BGR for drawing
-    
+    # Draw the polygon mask if provided
+    if polygon_mask:
+        # Get the coordinates of the polygon
+        x, y = polygon_mask.exterior.xy
+        # Draw the polygon on the image
+        cv2.polylines(img, [np.array(list(zip(x, y)), dtype=np.int32)], isClosed=True, color=(255, 0, 0), thickness=2)  # Red color for the mask
+
     # Draw filled masks first (if enabled) so they appear behind other elements
     if config.draw_masks:
         for result in results:
@@ -250,7 +253,7 @@ def run_sliding_window_inference(model_path, image_path, window_config: SlidingW
         fused_results = [result for result in fused_results if is_within_polygon(result['box'], polygon_mask)]
 
     # Visualize results
-    img_with_detections = visualize_detections(image, fused_results, vis_config)
+    img_with_detections = visualize_detections(image, fused_results, vis_config, polygon_mask)
     
     return img_with_detections, fused_results
 
@@ -378,7 +381,7 @@ def run_inference(model_path, image_path, conf_threshold=0.25, vis_config: Visua
         results_dict = [result for result in results_dict if is_within_polygon(result['box'], polygon_mask)]
     
     # Visualize results
-    img_with_detections = visualize_detections(image, results_dict, vis_config)
+    img_with_detections = visualize_detections(image, results_dict, vis_config, polygon_mask)
     
     return img_with_detections, results_dict
 
