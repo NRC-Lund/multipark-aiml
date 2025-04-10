@@ -25,7 +25,7 @@ class SlidingWindowConfig:
     """Configuration for sliding window inference"""
     window_size: int = 640  # Size of each window
     overlap: int = 128  # Overlap between windows
-    conf_threshold: float = 0.25  # Confidence threshold for detections
+    iou_threshold: float = 0.4  # Intersection-over-union threshold for non-maximum suppression
 
 def visualize_detections(image, results, config: VisualizationConfig = None, polygon_mask=None):
     """
@@ -145,7 +145,41 @@ def polygon_nms(results, iou_threshold=0.5):
         results = filtered
     return keep
 
-def run_sliding_window_inference(model_path, image_path, window_config: SlidingWindowConfig, vis_config: VisualizationConfig = None, polygon_mask=None):
+def remove_close_detections(results, min_distance):
+    """
+    Remove detections that are too close to each other, keeping the one with the highest confidence.
+
+    Args:
+        results: List of dictionaries containing detection results.
+        min_distance: Minimum distance between detections to keep them.
+
+    Returns:
+        List of filtered results.
+    """
+    filtered_results = []
+
+    for current in results:
+        keep = True
+        current_center = np.array([(current['box'][0] + current['box'][2]) / 2, (current['box'][1] + current['box'][3]) / 2])
+        for other in filtered_results:
+            # Calculate the center of the bounding boxes
+            other_center = np.array([(other['box'][0] + other['box'][2]) / 2, (other['box'][1] + other['box'][3]) / 2])
+            # Calculate the distance between the centers
+            distance = np.linalg.norm(current_center - other_center)
+            if distance < min_distance:
+                # If the current detection has a higher confidence, replace the other
+                if current['confidence'] > other['confidence']:
+                    filtered_results.remove(other)  # Remove the other detection
+                    filtered_results.append(current)  # Keep the current detection
+                keep = False
+                break
+        
+        if keep:
+            filtered_results.append(current)
+
+    return filtered_results
+
+def run_sliding_window_inference(model_path, image_path, conf_threshold, min_distance, window_config: SlidingWindowConfig, vis_config: VisualizationConfig = None, polygon_mask=None):
     """
     Run inference using a sliding window approach for large images
     
@@ -170,6 +204,7 @@ def run_sliding_window_inference(model_path, image_path, window_config: SlidingW
     height, width = image.shape[:2]
     window_size = window_config.window_size
     overlap = window_config.overlap
+    iou_thres = window_config.iou_threshold
     stride = window_size - overlap
     
     print(f"Running sliding window inference on image {width}x{height} with window size {window_size}, overlap {overlap}, and stride {stride}")
@@ -202,7 +237,8 @@ def run_sliding_window_inference(model_path, image_path, window_config: SlidingW
             # Run inference on the window
             results = model(
                 window,
-                conf=window_config.conf_threshold,
+                conf=conf_threshold,
+                iou=iou_thres,
                 verbose=False
             )
             
@@ -245,8 +281,13 @@ def run_sliding_window_inference(model_path, image_path, window_config: SlidingW
                 # Append the adjusted result
                 all_results.append(result)
     
-    # Remove duplicate detections
-    fused_results = polygon_nms(all_results, iou_threshold=0.4)
+
+    # Remove duplicate detections due to tile overlap
+    fused_results = polygon_nms(all_results, iou_thres)
+
+    # Remove close detections
+    if min_distance:
+        fused_results = remove_close_detections(fused_results, min_distance)
 
     # Remove detections outside the mask
     if polygon_mask:
@@ -344,7 +385,7 @@ def is_within_polygon(box, polygon):
     rect = Polygon([(box[0], box[1]), (box[2], box[1]), (box[2], box[3]), (box[0], box[3])])
     return polygon.contains(rect)
 
-def run_inference(model_path, image_path, conf_threshold=0.25, vis_config: VisualizationConfig = None, polygon_mask=None):
+def run_inference(model_path, image_path, conf_threshold, min_distance, vis_config: VisualizationConfig = None, polygon_mask=None):
     """
     Run inference using a YOLO model
     
@@ -376,6 +417,10 @@ def run_inference(model_path, image_path, conf_threshold=0.25, vis_config: Visua
     # Convert results to dictionary format
     results_dict = convert_yolo_to_dict(results[0])
     
+    # Remove close detections
+    if min_distance:
+        results_dict = remove_close_detections(results_dict, min_distance)
+
     # Filter results based on the polygon mask
     if polygon_mask:
         results_dict = [result for result in results_dict if is_within_polygon(result['box'], polygon_mask)]
@@ -483,7 +528,9 @@ def main():
     parser.add_argument('--save-image', action='store_true', help='Save visualization image')
     parser.add_argument('--save-geojson', action='store_true', help='Save results in GeoJSON format')
     parser.add_argument('--geojson-mask', type=str, help='Path to GeoJSON file defining a polygon mask')
-    
+    parser.add_argument('--iou-thres', type=float, default=0.4, help='IoU threshold for Non-Maximum Suppression')
+    parser.add_argument('--min-dist', type=float, default=None, help='Minimum distance between detections to keep them')
+
     args = parser.parse_args()
     
     # Create output directory if it doesn't exist
@@ -535,13 +582,15 @@ def main():
                 window_config = SlidingWindowConfig(
                     window_size=args.window_size,
                     overlap=args.overlap,
-                    conf_threshold=args.conf
+                    iou_threshold=args.iou_thres
                 )
                 
                 # Run sliding window inference with polygon mask
                 img_with_detections, results = run_sliding_window_inference(
                     model_path=args.model,
                     image_path=input_image,
+                    conf_threshold=args.conf,
+                    min_distance=args.min_dist,
                     window_config=window_config,
                     vis_config=vis_config,
                     polygon_mask=polygon_mask
@@ -565,6 +614,7 @@ def main():
                     model_path=args.model,
                     image_path=input_image,
                     conf_threshold=args.conf,
+                    min_distance=args.min_dist,
                     vis_config=vis_config,
                     polygon_mask=polygon_mask
                 )
