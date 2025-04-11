@@ -527,7 +527,7 @@ def main():
     parser.add_argument('--mask-alpha', type=float, default=0.3, help='Transparency for filled masks')
     parser.add_argument('--save-image', action='store_true', help='Save visualization image')
     parser.add_argument('--save-geojson', action='store_true', help='Save results in GeoJSON format')
-    parser.add_argument('--geojson-mask', type=str, help='Path to GeoJSON file defining a polygon mask')
+    parser.add_argument('--use-geojson-mask', action='store_true', help='Use GeoJSON file to define a polygon mask')
     parser.add_argument('--iou-thres', type=float, default=0.4, help='IoU threshold for Non-Maximum Suppression')
     parser.add_argument('--min-dist', type=float, default=None, help='Minimum distance between detections to keep them')
 
@@ -565,10 +565,6 @@ def main():
         print("Error: No valid input images found")
         return
     
-    # Load the polygon mask if provided
-    polygon_mask = None
-    if args.geojson_mask:
-        polygon_mask = load_geojson_mask(args.geojson_mask)
 
     try:
         for input_image in input_images:
@@ -576,6 +572,16 @@ def main():
             
             # Get base filename without extension
             base_name = os.path.splitext(os.path.basename(input_image))[0]
+            print("Base name: ",base_name)
+            # Load the polygon mask if provided
+            polygon_mask = None
+            if args.use_geojson_mask:
+                # Get full path without extension
+                geojson_mask_name = os.path.splitext(input_image)[0] + '.geojson'
+                # Load the GeoJSON mask
+                polygon_mask = load_geojson_mask(geojson_mask_name)
+                # Print message indicating which GeoJSON file is loaded
+                print(f"Loaded GeoJSON mask from: {geojson_mask_name}")
             
             if args.sliding_window:
                 # Create sliding window config
