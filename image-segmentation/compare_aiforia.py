@@ -4,7 +4,8 @@ import argparse
 from shapely.geometry import Point, mapping
 import numpy as np
 from scipy.spatial import cKDTree
-from scipy.optimize import minimize
+from scipy.spatial.distance import cdist
+from scipy.optimize import minimize, linear_sum_assignment
 import cv2
 import matplotlib.pyplot as plt
 import os
@@ -51,6 +52,20 @@ def align_point_clouds(pc1, pc2):
     result = minimize(cost, x0=np.zeros(2))  # Only (tx, ty)
     return result.x  # Optimal translation vector
 
+def match_points(pc1, pc2, threshold=20):
+    dist_matrix = cdist(pc1, pc2)
+    dist_matrix[dist_matrix > threshold] = 1e6  # Mask out long distances
+
+    row_ind, col_ind = linear_sum_assignment(dist_matrix)
+    matches = [(i, j) for i, j in zip(row_ind, col_ind) if dist_matrix[i, j] < 1e6]
+
+    matched_pc1 = set(i for i, _ in matches)
+    matched_pc2 = set(j for _, j in matches)
+    unmatched_pc1 = list(set(range(len(pc1))) - matched_pc1)
+    unmatched_pc2 = list(set(range(len(pc2))) - matched_pc2)
+
+    return matches, unmatched_pc1, unmatched_pc2
+
 def read_csv(csv_path, pixel_size):
     """
     Read the CSV file and scale the coordinates.
@@ -75,21 +90,23 @@ def read_csv(csv_path, pixel_size):
 
     return df
 
-def save_geojson(geojson_path, df):
+def save_geojson(geojson_path, df, num_matches, num_unmatched1, num_unmatched2):
     """
     Save features to a GeoJSON file.
 
     Args:
         geojson_path (str): Path to the output GeoJSON file.
-        features (list): List of GeoJSON features to save.
+        df (DataFrame): DataFrame containing the features to save.
+        num_matches (int): Number of matches found.
+        num_unmatched1 (int): Number of unmatched centers in centers1.
+        num_unmatched2 (int): Number of unmatched centers in centers2.
     """
-
     # Create a list to hold GeoJSON features
     features = []
 
     # Iterate over the rows in the DataFrame
     for _, row in df.iterrows():
-        # Get the object center coordinates, multiply by pixel size, and apply translation
+        # Get the object center coordinates
         x = row['Object center X (μm)']
         y = row['Object center Y (μm)']
         
@@ -111,7 +128,12 @@ def save_geojson(geojson_path, df):
     # Create the GeoJSON structure
     geojson = {
         "type": "FeatureCollection",
-        "features": features
+        "features": features,
+        "properties": {
+            "num_matches": num_matches,
+            "num_unmatched_aifoira": num_unmatched1,
+            "num_unmatched_multipark": num_unmatched2
+        }
     }
 
     # Ensure the directory exists before writing the GeoJSON file
@@ -125,7 +147,7 @@ def save_geojson(geojson_path, df):
 
     print(f"GeoJSON saved to {geojson_path}")
 
-def plot_centers(image_path, centers, centers2, save_image_path=None):
+def plot_centers(image_path, centers, centers2, save_image_path=None, matches=None):
     """
     Plot the centers on the image or save the image to a file.
 
@@ -134,6 +156,7 @@ def plot_centers(image_path, centers, centers2, save_image_path=None):
         centers (list): List of tuples containing center coordinates (x, y).
         centers2 (list): List of tuples containing second set of center coordinates (x, y).
         save_image_path (str, optional): Path to save the plotted image. If None, the image will be displayed.
+        matches (list, optional): List of matched indices to draw lines between.
     """
     # Load the image
     image = cv2.imread(image_path)
@@ -146,6 +169,13 @@ def plot_centers(image_path, centers, centers2, save_image_path=None):
         cv2.circle(image, (int(center[0]), int(center[1])), radius=5, color=(0, 0, 255), thickness=-1)  # Red dots for centers (Aiforia)
     for center in centers2:
         cv2.circle(image, (int(center[0]), int(center[1])), radius=5, color=(0, 255, 0), thickness=-1)  # Green dots for centers2 (Multipark)
+
+    # Draw lines connecting matched centers
+    if matches is not None:
+        for match in matches:
+            center1 = centers[match[0]]
+            center2 = centers2[match[1]]
+            cv2.line(image, (int(center1[0]), int(center1[1])), (int(center2[0]), int(center2[1])), color=(255, 0, 0), thickness=2)  # Yellow lines for matches
 
     # Create a legend
     legend_x, legend_y = 10, 10  # Starting position for the legend
@@ -184,23 +214,32 @@ def main():
     df = read_csv(args.csv, args.pixel_size)
 
     # Align
-    centers = np.column_stack((df['Object center X (μm)'], df['Object center Y (μm)']))
+    centers1 = np.column_stack((df['Object center X (μm)'], df['Object center Y (μm)']))
     centers2 = extract_centers(args.load_geojson)  # Extract centers from detections.
-    tx, ty = align_point_clouds(centers, centers2)
+    tx, ty = align_point_clouds(centers1, centers2)
     
     # Update the DataFrame with translated coordinates
     df['Object center X (μm)'] = df['Object center X (μm)'] + tx
     df['Object center Y (μm)'] = df['Object center Y (μm)'] + ty
     
     # Correctly translate centers2
-    centers_translated = centers + np.array([tx, ty])  # Translate centers2 by (tx, ty)
+    centers1_translated = centers1 + np.array([tx, ty])  # Translate centers1 by (tx, ty)
+
+    # Call match_point_clouds
+    matches, unmatched1, unmatched2 = match_points(centers1_translated, centers2, threshold=40)  # Example threshold of 20 pixels
+
+    # Print the number of matches and unmatched centers
+    print(matches)
+    print(f"Number of matches: {len(matches)}")
+    print(f"Number of unmatched Aiforia detections: {len(unmatched1)}")
+    print(f"Number of unmatched Multipark detections: {len(unmatched2)}")
 
     # Convert CSV to GeoJSON
-    save_geojson(args.save_geojson, df)
+    save_geojson(args.save_geojson, df, len(matches), len(unmatched1), len(unmatched2))
 
     # If an image path is provided, plot the centers
     if args.image:
-        plot_centers(args.image, centers_translated, centers2, args.save_image)  # Pass the save_image path
+        plot_centers(args.image, centers1_translated, centers2, args.save_image, matches)  # Pass the save_image path
 
 if __name__ == "__main__":
     main()
