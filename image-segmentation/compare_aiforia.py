@@ -201,21 +201,22 @@ def plot_centers(image_path, centers, centers2, save_image_path=None, matches=No
 def main():
     # Set up argument parser
     parser = argparse.ArgumentParser(description='Convert CSV object center coordinates to GeoJSON and plot centers.')
-    parser.add_argument('--csv', type=str, required=True, help='Path to the input CSV file.')
-    parser.add_argument('--save-geojson', type=str, required=True, help='Path to the output GeoJSON file for Aiforia detections.')
-    parser.add_argument('--load-geojson', type=str, required=True, help='Path to the GeoJSON file to load our detections from.')
+    parser.add_argument('--aiforia-csv', type=str, required=True, help='Path to the Aiforia detections CSV file.')
+    parser.add_argument('--multipark-geojson', type=str, required=True, help='Path to the Multipark detections GeoJSON file.')
+    parser.add_argument('--output-path', type=str, required=True, help='Path to the output directory for GeoJSON and images.')
     parser.add_argument('--pixel-size', type=float, required=True, help='Pixel size to convert coordinates.')
     parser.add_argument('--image', type=str, help='Path to the image file to plot centers on.')
-    parser.add_argument('--save-image', type=str, help='Path to save the plotted image instead of displaying it.')
+    parser.add_argument('--save-geojson', action='store_true', help='Flag to save the GeoJSON file.')
+    parser.add_argument('--save-image', action='store_true', help='Flag to save the plotted image instead of displaying it.')
 
     args = parser.parse_args()
 
-    # Read the CSV and scale coordinates
-    df = read_csv(args.csv, args.pixel_size)
+    # Read the Aiforia CSV and scale coordinates
+    df = read_csv(args.aiforia_csv, args.pixel_size)
 
     # Align
     centers1 = np.column_stack((df['Object center X (μm)'], df['Object center Y (μm)']))
-    centers2 = extract_centers(args.load_geojson)  # Extract centers from detections.
+    centers2 = extract_centers(args.multipark_geojson)  # Extract centers from detections.
     tx, ty = align_point_clouds(centers1, centers2)
     
     # Update the DataFrame with translated coordinates
@@ -229,17 +230,24 @@ def main():
     matches, unmatched1, unmatched2 = match_points(centers1_translated, centers2, threshold=40)  # Example threshold of 20 pixels
 
     # Print the number of matches and unmatched centers
-    print(matches)
     print(f"Number of matches: {len(matches)}")
     print(f"Number of unmatched Aiforia detections: {len(unmatched1)}")
     print(f"Number of unmatched Multipark detections: {len(unmatched2)}")
 
-    # Convert CSV to GeoJSON
-    save_geojson(args.save_geojson, df, len(matches), len(unmatched1), len(unmatched2))
+    # Save GeoJSON if the flag is set
+    if args.save_geojson:
+        base_name = os.path.splitext(os.path.basename(args.image))[0]  # Get base name from the input image
+        geojson_path = os.path.join(args.output_path, f"{base_name}.geojson")
+        save_geojson(geojson_path, df, len(matches), len(unmatched1), len(unmatched2))
 
     # If an image path is provided, plot the centers
     if args.image:
-        plot_centers(args.image, centers1_translated, centers2, args.save_image, matches)  # Pass the save_image path
+        if args.save_image:
+            save_image_path = os.path.join(args.output_path, f"{base_name}_centers.png")  # Save image with base name
+        else:
+            save_image_path = None
+        
+        plot_centers(args.image, centers1_translated, centers2, save_image_path, matches)  # Pass the save_image path
 
 if __name__ == "__main__":
     main()
