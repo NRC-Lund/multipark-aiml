@@ -5,6 +5,16 @@ from dotenv import load_dotenv
 import argparse
 import torch
 
+def get_device(args_device):
+    """Return the device string for Ultralytics YOLO training."""
+    if args_device:
+        return args_device
+    if torch.cuda.is_available():
+        return '0'
+    if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        return 'mps'
+    return 'cpu'
+
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Train YOLO segmentation model')
@@ -16,20 +26,8 @@ def main():
     parser.add_argument('--model', type=str, default='yolo11n-seg', help='Model file name')
     args = parser.parse_args()
 
-    # Check GPU
-    #if not args.device:
-    #    if torch.cuda.is_available():
-    #        device = torch.device("cuda")   # Use CUDA if available
-    #    else:
-    #        if torch.backends.mps.is_available():
-    #            device = torch.device("mps")   # Use MPS if available
-    #        else:
-    #            device = torch.device("cpu")   # Use CPU if no other device is available
-    #else:
-    #    device = torch.device(args.device)
-    #print("Using device:", device)
-
-    print("Cuda:", torch.cuda.is_available())
+    device = get_device(args.device)
+    print("Using device:", device)
 
     # Load model
     print("Initializing model...")
@@ -39,7 +37,6 @@ def main():
     data_yaml_path = Path(args.dataset_dir) / "data.yaml"
     data_yaml_path = data_yaml_path.resolve()   # Path must be absolute
 
-
     # Train model
     print("Starting training...")
     results = model.train(
@@ -47,7 +44,7 @@ def main():
         epochs=args.epochs,
         imgsz=args.imgsz,
         batch=args.batch,
-        device=0
+        device=device
     )
 
     return results.save_dir
