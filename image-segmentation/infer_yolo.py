@@ -42,6 +42,11 @@ def visualize_detections(image, results, config: VisualizationConfig = None, pol
     
     # Create a copy of the image to draw on
     img = image.copy()
+
+    # Convert to grayscale if no_colors is set
+    if config.no_colors:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
     
     # Draw the polygon mask if provided
     if polygon_mask:
@@ -655,4 +660,4 @@ def main():
         raise  # This will show the full traceback
 
 if __name__ == "__main__":
-    main() 
+    main()
