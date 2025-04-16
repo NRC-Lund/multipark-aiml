@@ -1,9 +1,8 @@
 from roboflow import Roboflow
-import os
-from dotenv import load_dotenv
 import argparse
 import shutil
-from pathlib import Path  # Import pathlib
+from pathlib import Path
+from config import get_env_var, select_project
 
 def main():
     # Parse command line arguments
@@ -15,41 +14,23 @@ def main():
     parser.add_argument('--dataset-path', type=str, help='Dataset path')
     args = parser.parse_args()
 
-    # Load environment variables from .env file
-    load_dotenv()
-    
     # Get API key from command line arguments or environment variables
-    if not args.api_key:
-        print("No API key provided, using environment variable ROBOFLOW_API_KEY")
-        ROBOFLOW_API_KEY = os.getenv('ROBOFLOW_API_KEY')
-        if not ROBOFLOW_API_KEY:
-            print("Error: No API key found in environment variables. Please set ROBOFLOW_API_KEY.")
-            return  # Exit the function if the API key is not found
-    else:
-        ROBOFLOW_API_KEY = args.api_key
-
-    # Get project name from command line arguments or environment variables
-    if not args.project:
-        print("No project name provided, using environment variable PROJECT_NAME")
-        PROJECT_NAME = os.getenv('PROJECT_NAME')
-        if not PROJECT_NAME:
-            print("Error: No project name found in environment variables. Please set PROJECT_NAME.")
-            return  # Exit the function if the project name is not found
-    else:
-        PROJECT_NAME = args.project
+    ROBOFLOW_API_KEY = args.api_key or get_env_var('ROBOFLOW_API_KEY')
 
     # Get dataset path from command line arguments or environment variables
-    if not args.dataset_path:
-        print("No dataset path provided, using environment variable DATASET_PATH")
-        DATASET_PATH = os.getenv('DATASET_PATH')
-        if not DATASET_PATH:
-            print("Error: No dataset path found in environment variables. Please set DATASET_PATH.")
-            return  # Exit the function if the dataset path is not found
-    else:
-        DATASET_PATH = args.dataset_path
+    DATASET_PATH = args.dataset_path or get_env_var('DATASET_PATH')
     
     # Initialize Roboflow
     rf = Roboflow(api_key=ROBOFLOW_API_KEY)
+    
+    # Get project name from command line arguments only, or ask interactively if not provided
+    workspace = rf.workspace()
+    PROJECT_NAME = select_project(workspace, args.project)
+    project = workspace.project(PROJECT_NAME)
+    
+    # If the project string contains a slash, extract only the project slug
+    if "/" in PROJECT_NAME:
+        PROJECT_NAME = PROJECT_NAME.split("/")[-1]
     project = rf.workspace().project(PROJECT_NAME)
     
     # Get dataset version from command line arguments or environment variables
