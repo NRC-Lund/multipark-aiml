@@ -61,19 +61,28 @@ HTML = '''
 <div class="container">
   <!-- File selection/upload section -->
   <div class="section">
-    <div class="section-title">1. Select or Upload Image</div>
+    <div class="section-title">1. Image files</div>
     <form method=post enctype=multipart/form-data style="margin-bottom:12px;" id="uploadForm">
-      <input type=file name=file accept="image/*" id="fileInput" onchange="document.getElementById('uploadBtn').disabled = !this.value">
-      <input type=submit value="Upload New Image" id="uploadBtn" disabled>
+      <label for="fileInput">Select a file for upload:</label>
+      <input type=file name=file accept="image/*" id="fileInput">
+      <input type=submit value="Upload New Image" id="uploadBtn" style="display:none;">
     </form>
-    <form method=post>
-      <label for="file_select">Or select an uploaded file:</label>
+    <script>
+      document.getElementById('fileInput').addEventListener('change', function() {
+        if (this.value) {
+          document.getElementById('uploadForm').submit();
+        }
+      });
+    </script>
+    <form method=post id="fileSelectForm" style="display:inline;">
+      <label for="file_select">Or select an already uploaded file:</label>
       <select name="filename" id="file_select" onchange="this.form.submit()">
         <option value="">-- Select file --</option>
         {% for fname in uploaded_files %}
           <option value="{{ fname }}" {% if fname == uploaded_img %}selected{% endif %}>{{ fname }}</option>
         {% endfor %}
       </select>
+      <button type="submit" name="delete_file" value="1" onclick="return confirm('Are you sure you want to delete this file?');" {% if not uploaded_img %}disabled{% endif %}>Delete selected file</button>
     </form>
   </div>
 
@@ -95,15 +104,15 @@ HTML = '''
           <label><input type="checkbox" name="sliding_window" {% if sliding_window %}checked{% endif %}> Sliding Window</label>
         </div>
         <div class="col">
-          <label>IOU Threshold:</label>
+          <label>IOU Threshold:</label><br>
           <input type="number" name="iou_thres" min="0" max="1" step="0.01" value="{{ iou_thres }}">
         </div>
         <div class="col">
-          <label>Min Distance:</label>
+          <label>Min Distance:</label><br>
           <input type="number" name="min_dist" min="0" step="1" value="{{ min_dist }}">
         </div>
         <div class="col">
-          <input type="submit" name="run_infer" value="Run Inference">
+          <input type="submit" name="run_infer" value="Run Inference on selected image">
         </div>
       </div>
       <div class="inference-feedback" id="inferenceFeedback">
@@ -245,6 +254,43 @@ def upload_and_infer():
     model_paths = get_model_paths()
     
     if request.method == 'POST':
+        # 0. Handle file deletion
+        if 'delete_file' in request.form and request.form.get('filename'):
+            filename = request.form.get('filename')
+            if filename and allowed_file(filename):
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                # Remove associated output files if exist
+                base, ext = os.path.splitext(filename)
+                geojson_file = os.path.join(app.config['OUTPUT_FOLDER'], f'{base}.geojson')
+                vis_file = os.path.join(app.config['OUTPUT_FOLDER'], f'{base}_vis.png')
+                for f in [geojson_file, vis_file]:
+                    if os.path.exists(f):
+                        os.remove(f)
+                if session.get('uploaded_img') == filename:
+                    session.pop('uploaded_img')
+                uploaded_img = None
+                uploaded_files = get_uploaded_files()
+                # Early return to refresh page after deletion
+                return render_template_string(
+                    HTML,
+                    uploaded_img=uploaded_img,
+                    result_img=None,
+                    conf=viz_conf,
+                    viz_conf=viz_conf,
+                    viz_boxes=viz_boxes,
+                    viz_contours=viz_contours,
+                    viz_masks=viz_masks,
+                    uploaded_files=uploaded_files,
+                    model_path=model_path,
+                    sliding_window=sliding_window,
+                    iou_thres=iou_thres,
+                    min_dist=min_dist,
+                    geojson_exists=False,
+                    num_detections=0,
+                    model_paths=model_paths
+                )
         # 1. Run inference if requested
         if 'run_infer' in request.form and request.form.get('filename'):
             filename = request.form.get('filename')
