@@ -323,8 +323,10 @@ class YOLOInferenceGUI:
     def runInference(self, config):
         try:
             # Build command
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            infer_yolo_path = os.path.join(script_dir, "infer_yolo.py")
             cmd = [
-                sys.executable, "infer_yolo.py",
+                sys.executable, infer_yolo_path,
                 "--model", config['model_path'],
                 "--input-path", config['input_path'],
                 "--output-path", config['output_path'],
@@ -400,4 +402,4 @@ def main():
     webview.start(debug=True)
 
 if __name__ == "__main__":
-    main() 
+    main()

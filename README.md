@@ -62,7 +62,7 @@ Key options:
 ```
 python gui_infer_yolo.py
 ```
-A graphical interface will open for model selection and inference.
+A graphical interface will open for model selection and inference. (Tested on Mac, tested and not working on Linux CentOS.)
 
 ### Deploy a Model to Roboflow
 ```
