@@ -1,7 +1,7 @@
 # Minimal Flask web app for infer_yolo
 import os
 import sys
-from flask import Flask, request, render_template_string, send_from_directory, redirect, url_for, session
+from flask import Flask, request, render_template_string, send_from_directory, redirect, url_for, session, jsonify
 import subprocess
 from werkzeug.utils import secure_filename
 import matplotlib.pyplot as plt
@@ -37,6 +37,26 @@ HTML = '''
   input[type=range] { width: 80%; }
   .slider-label { display: flex; align-items: center; gap: 12px; margin: 16px 0; }
   fieldset:disabled { opacity: 0.5; }
+  .spinner {
+    display: none;
+    margin: 0 auto;
+    border: 6px solid #f3f3f3;
+    border-top: 6px solid #007bff;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  .inference-feedback {
+    text-align: center;
+    margin-top: 12px;
+    font-size: 1.1em;
+    color: #007bff;
+  }
 </style>
 <div class="container">
   <!-- File selection/upload section -->
@@ -60,12 +80,16 @@ HTML = '''
   <!-- Inference options section -->
   <div class="section">
     <div class="section-title">2. Inference Options</div>
-    <form method=post>
+    <form method=post id="inferForm">
       <input type="hidden" name="filename" value="{{ uploaded_img }}">
       <div class="row">
         <div class="col">
-          <label>Model Path:</label>
-          <input type="text" name="model_path" value="{{ model_path }}" style="width:100%">
+          <label>Model:</label>
+          <select name="model_path" style="width:100%">
+            {% for mpath in model_paths %}
+              <option value="{{ mpath }}" {% if mpath == model_path %}selected{% endif %}>{{ mpath.split('/')[-1] }}</option>
+            {% endfor %}
+          </select>
         </div>
         <div class="col">
           <label><input type="checkbox" name="sliding_window" {% if sliding_window %}checked{% endif %}> Sliding Window</label>
@@ -82,7 +106,10 @@ HTML = '''
           <input type="submit" name="run_infer" value="Run Inference">
         </div>
       </div>
-      <!-- Removed confidence threshold info -->
+      <div class="inference-feedback" id="inferenceFeedback">
+        <div class="spinner" id="spinner"></div>
+        <span id="inferenceMsg"></span>
+      </div>
     </form>
   </div>
 
@@ -90,7 +117,7 @@ HTML = '''
   <div class="section">
     <div class="section-title">3. Visualization</div>
     <fieldset {% if not geojson_exists %}disabled{% endif %}>
-      <form method=post id="vizform">
+      <form method=post id="vizform" onsubmit="return false;">
         <input type="hidden" name="filename" value="{{ uploaded_img }}">
         <input type="hidden" name="model_path" value="{{ model_path }}">
         <input type="hidden" name="sliding_window" value="{{ 'on' if sliding_window else '' }}">
@@ -102,39 +129,82 @@ HTML = '''
               <label>Confidence Threshold:</label>
               <input type="range" name="viz_conf" min="0" max="1" step="0.01" value="{{ viz_conf }}" id="viz_conf_slider">
               <span id="viz_conf_val">{{ viz_conf }}</span>
-              <script>
-                const slider = document.getElementById('viz_conf_slider');
-                const form = document.getElementById('vizform');
-                slider.oninput = function() {
-                  document.getElementById('viz_conf_val').innerText = this.value;
-                };
-                slider.onchange = function() {
-                  form.submit();
-                };
-              </script>
             </div>
           </div>
           <div class="col">
-            <label><input type="checkbox" name="viz_boxes" {% if viz_boxes %}checked{% endif %} onchange="this.form.submit()"> Show Boxes</label>
+            <label><input type="checkbox" name="viz_boxes" {% if viz_boxes %}checked{% endif %} id="viz_boxes_cb"> Show Boxes</label>
           </div>
           <div class="col">
-            <label><input type="checkbox" name="viz_contours" {% if viz_contours %}checked{% endif %} onchange="this.form.submit()"> Show Contours</label>
+            <label><input type="checkbox" name="viz_contours" {% if viz_contours %}checked{% endif %} id="viz_contours_cb"> Show Contours</label>
           </div>
         </div>
       </form>
+      <div id="viz_result">
       {% if result_img %}
         <h2>Detections:</h2>
-        <img src="{{ url_for('output_file', filename=result_img) }}">
+        <img src="{{ url_for('output_file', filename=result_img) }}" id="viz_img">
         <div style="font-size:1em;margin-top:12px;">
           {{ num_detections }} detection{{ 's' if num_detections != 1 else '' }} found at this confidence threshold.
         </div>
       {% endif %}
+      </div>
       {% if not geojson_exists %}
         <div style="color:#c00;font-size:1em;margin-top:12px;">Run inference to enable visualization.</div>
       {% endif %}
+      <script>
+        function sendVizAjax() {
+          const form = document.getElementById('vizform');
+          const formData = new FormData(form);
+          fetch('/viz_update', {
+            method: 'POST',
+            body: formData
+          })
+          .then(response => response.json())
+          .then(data => {
+            let html = '';
+            if (data.result_img_url) {
+              html += '<h2>Detections:</h2>';
+              html += `<img src="${data.result_img_url}?t=${Date.now()}" id="viz_img">`;
+              html += `<div style=\"font-size:1em;margin-top:12px;\">${data.num_detections} detection${data.num_detections==1?'':'s'} found at this confidence threshold.</div>`;
+            }
+            document.getElementById('viz_result').innerHTML = html;
+          });
+        }
+        document.getElementById('viz_conf_slider').oninput = function(e) {
+          document.getElementById('viz_conf_val').innerText = this.value;
+        };
+        document.getElementById('viz_conf_slider').addEventListener('change', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          sendVizAjax();
+          return false;
+        });
+        document.getElementById('viz_boxes_cb').addEventListener('change', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          sendVizAjax();
+          return false;
+        });
+        document.getElementById('viz_contours_cb').addEventListener('change', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          sendVizAjax();
+          return false;
+        });
+      </script>
     </fieldset>
   </div>
 </div>
+<script>
+  document.getElementById('inferForm').addEventListener('submit', function() {
+    document.getElementById('spinner').style.display = 'inline-block';
+    document.getElementById('inferenceMsg').textContent = 'Running inference, please wait...';
+  });
+  window.onload = function() {
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('inferenceMsg').textContent = '';
+  };
+</script>
 '''
 
 def allowed_file(filename):
@@ -149,6 +219,10 @@ def get_uploaded_files():
         if allowed_file(fname):
             files.append(fname)
     return sorted(files)
+
+def get_model_paths():
+    model_dir = '/Users/med-pha/Documents/Science/Projects/ImageSegmentation/models'
+    return [os.path.join(model_dir, fname) for fname in os.listdir(model_dir) if fname.endswith('.pt')]
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_and_infer():
@@ -168,6 +242,7 @@ def upload_and_infer():
     result_img = None
     geojson_exists = False
     num_detections = 0
+    model_paths = get_model_paths()
     
     if request.method == 'POST':
         # 1. Run inference if requested
@@ -239,7 +314,8 @@ def upload_and_infer():
         iou_thres=iou_thres,
         min_dist=min_dist,
         geojson_exists=geojson_exists,
-        num_detections=num_detections
+        num_detections=num_detections,
+        model_paths=model_paths
     )
 
 @app.route('/uploads/<filename>')
@@ -249,6 +325,41 @@ def uploaded_file(filename):
 @app.route('/outputs/<filename>')
 def output_file(filename):
     return send_from_directory(app.config['OUTPUT_FOLDER'], filename)
+
+@app.route('/viz_update', methods=['POST'])
+def viz_update():
+    uploaded_img = request.form.get('filename')
+    model_path = request.form.get('model_path', get_default_model_path())
+    sliding_window = request.form.get('sliding_window', 'on') == 'on'
+    iou_thres = float(request.form.get('iou_thres', '0.5'))
+    min_dist = request.form.get('min_dist', '20')
+    min_dist = float(min_dist) if min_dist else 20
+    viz_conf = float(request.form.get('viz_conf', '0.3'))
+    viz_boxes = 'viz_boxes' in request.form
+    viz_contours = 'viz_contours' in request.form
+    viz_masks = 'viz_masks' in request.form
+    result_img = None
+    num_detections = 0
+
+    if uploaded_img:
+        filename = uploaded_img
+        input_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        output_path = app.config['OUTPUT_FOLDER']
+        base, ext = os.path.splitext(filename)
+        geojson_file = os.path.join(output_path, f'{base}.geojson')
+        vis_file = f'{base}_vis.png'
+        vis_path = os.path.join(output_path, vis_file)
+        if os.path.exists(geojson_file):
+            num_detections = plot_detections(
+                input_path, geojson_file, vis_path, viz_conf,
+                show_boxes=viz_boxes, show_contours=viz_contours, show_masks=viz_masks
+            )
+            result_img = vis_file
+
+    return jsonify({
+        'result_img_url': url_for('output_file', filename=result_img) if result_img else None,
+        'num_detections': num_detections
+    })
 
 def plot_detections(image_path, geojson_path, out_path, conf_threshold=0.3, show_boxes=True, show_contours=True, show_masks=True):
     img = cv2.imread(image_path)
