@@ -10,8 +10,8 @@ import numpy as np
 import json
 import datetime
 
-UPLOAD_FOLDER = 'uploads'
-OUTPUT_FOLDER = 'outputs'
+UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
+OUTPUT_FOLDER = os.path.join(os.path.dirname(__file__), 'outputs')
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'bmp', 'tif', 'tiff'}
 
 app = Flask(__name__)
@@ -165,7 +165,7 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def get_default_model_path():
-    return '/Users/med-pha/Documents/Science/Projects/ImageSegmentation/models/th-stained-dopamine-neurons-v3-medium.pt'
+    return os.path.join(os.path.dirname(__file__), 'models', 'th-stained-dopamine-neurons-v3-medium.pt')
 
 def get_uploaded_files():
     files = []
@@ -175,7 +175,7 @@ def get_uploaded_files():
     return sorted(files)
 
 def get_model_paths():
-    model_dir = '/Users/med-pha/Documents/Science/Projects/ImageSegmentation/models'
+    model_dir = os.path.join(os.path.dirname(__file__), 'models')
     return [os.path.join(model_dir, fname) for fname in os.listdir(model_dir) if fname.endswith('.pt')]
 
 @app.route('/', methods=['GET', 'POST'])
@@ -197,6 +197,7 @@ def upload_and_infer():
     geojson_exists = False
     num_detections = 0
     model_paths = get_model_paths()
+    geojson_timestamp = None  # Ensure variable is always defined
     
     if request.method == 'POST':
         # 0. Handle file deletion
@@ -498,4 +499,4 @@ def plot_detections(image_path, geojson_path, out_path, conf_threshold=0.3, show
     return detections_found
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', debug=True)
