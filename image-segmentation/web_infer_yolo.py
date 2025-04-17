@@ -14,7 +14,7 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
 OUTPUT_FOLDER = os.path.join(os.path.dirname(__file__), 'outputs')
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'bmp', 'tif', 'tiff'}
 
-app = Flask(__name__)
+app = Flask(__name__, static_url_path='/img-seg/static')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['OUTPUT_FOLDER'] = OUTPUT_FOLDER
 app.secret_key = 'your_secret_key'  # Needed for session
@@ -248,7 +248,8 @@ def upload_and_infer():
             geojson_file = os.path.join(output_path, f'{base}.geojson')
             # Always run inference with conf=0.1
             cmd = [
-                sys.executable, 'infer_yolo.py',
+                '/srv/data/Resources/Python/anaconda3/envs/multipark-web/bin/python',
+                'infer_yolo.py',
                 '--model', model_path,
                 '--input-path', input_path,
                 '--output-path', output_path,
@@ -498,5 +499,5 @@ def plot_detections(image_path, geojson_path, out_path, conf_threshold=0.3, show
     cv2.imwrite(out_path, img)
     return detections_found
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True)
+#if __name__ == '__main__':
+#    app.run(host='0.0.0.0', debug=True)
