@@ -406,7 +406,7 @@ def visualize():
         <img src="{{ url_for('output_file', filename=vis_file) }}?t={{ ts }}" id="viz_img">
         <div style="font-size:1em;margin-top:12px;">{{ num_detections }} detection{{ '' if num_detections==1 else 's' }} found at this confidence threshold.</div>
       </div>
-      <a href="/" class="back-link">&larr; Back to main page</a>
+      <a href="/img-seg" class="back-link">&larr; Back to main page</a>
     </div>
     <script>
       function sendVizAjax() {
