@@ -301,7 +301,7 @@ class YOLOInferenceGUI:
         return webview.windows[0].create_file_dialog(
             webview.OPEN_DIALOG,
             directory='./models',
-            file_types=('PyTorch model files (*.pt)', 'All files (*.*)')
+            file_types=('PyTorch model files (*.pt;*.torchscript)', 'All files (*.*)')
         )
     
     def browseInputFile(self):
