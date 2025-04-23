@@ -10,11 +10,12 @@ import numpy as np
 import json
 import datetime
 
-UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
-OUTPUT_FOLDER = os.path.join(os.path.dirname(__file__), 'outputs')
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+OUTPUT_FOLDER = os.path.join(BASE_DIR, 'outputs')
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'bmp', 'tif', 'tiff'}
 
-app = Flask(__name__)
+app = Flask(__name__, static_url_path='/img-seg/static')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['OUTPUT_FOLDER'] = OUTPUT_FOLDER
 app.secret_key = 'your_secret_key'  # Needed for session
@@ -87,7 +88,7 @@ HTML = '''
     </form>
     {% if uploaded_img %}
       <div style="margin-top:10px; max-width:200px;">
-        <img src="/uploads/{{ uploaded_img }}" alt="Preview" style="width:100%; border-radius:4px; box-shadow:0 1px 4px #0002;">
+        <img src="/img-seg/uploads/{{ uploaded_img }}" alt="Preview" style="width:100%; border-radius:4px; box-shadow:0 1px 4px #0002;">
       </div>
     {% endif %}
   </div>
@@ -165,7 +166,7 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def get_default_model_path():
-    return os.path.join(os.path.dirname(__file__), 'models', 'th-stained-dopamine-neurons-v3-medium.torchscript')
+    return os.path.join(BASE_DIR, 'models', 'th-stained-dopamine-neurons-v3-medium.torchscript')
 
 def get_uploaded_files():
     files = []
@@ -175,7 +176,7 @@ def get_uploaded_files():
     return sorted(files)
 
 def get_model_paths():
-    model_dir = os.path.join(os.path.dirname(__file__), 'models')
+    model_dir = os.path.join(BASE_DIR, 'models')
     return [os.path.join(model_dir, fname) for fname in os.listdir(model_dir) if fname.endswith('.torchscript')]
 
 @app.route('/', methods=['GET', 'POST'])
@@ -247,8 +248,10 @@ def upload_and_infer():
             base, ext = os.path.splitext(filename)
             geojson_file = os.path.join(output_path, f'{base}.geojson')
             # Always run inference with conf=0.1
+            print(model_path)
             cmd = [
-                sys.executable, 'infer_yolo.py',
+                '/srv/data/Resources/Python/anaconda3/envs/multipark-web/bin/python',
+                'infer_yolo.py',
                 '--model', model_path,
                 '--input-path', input_path,
                 '--output-path', output_path,
@@ -316,11 +319,11 @@ def upload_and_infer():
 
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    return redirect(f"/img-seg/uploads/{filename}")
 
 @app.route('/outputs/<filename>')
 def output_file(filename):
-    return send_from_directory(app.config['OUTPUT_FOLDER'], filename)
+    return redirect(f"/img-seg/outputs/{filename}")
 
 @app.route('/viz_update', methods=['POST'])
 def viz_update():
@@ -498,5 +501,5 @@ def plot_detections(image_path, geojson_path, out_path, conf_threshold=0.3, show
     cv2.imwrite(out_path, img)
     return detections_found
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True)
+#if __name__ == '__main__':
+#    app.run(host='0.0.0.0', debug=True)
