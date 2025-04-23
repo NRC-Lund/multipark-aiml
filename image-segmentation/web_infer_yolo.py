@@ -166,7 +166,7 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def get_default_model_path():
-    return os.path.join(BASE_DIR, 'models', 'th-stained-dopamine-neurons-v3-medium.torchscript')
+    return os.path.join(BASE_DIR, 'models', 'th-stained-dopamine-neurons-v3-medium.pt')
 
 def get_uploaded_files():
     files = []
@@ -177,7 +177,7 @@ def get_uploaded_files():
 
 def get_model_paths():
     model_dir = os.path.join(BASE_DIR, 'models')
-    return [os.path.join(model_dir, fname) for fname in os.listdir(model_dir) if fname.endswith('.torchscript')]
+    return [os.path.join(model_dir, fname) for fname in os.listdir(model_dir) if fname.endswith('.pt')]
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_and_infer():
