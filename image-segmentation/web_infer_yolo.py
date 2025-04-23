@@ -412,6 +412,7 @@ def visualize():
       function sendVizAjax() {
         const form = document.getElementById('vizForm');
         const formData = new FormData(form);
+        formData.set('filename', '{{ filename }}'); // Ensure filename is always sent
         if (document.getElementById('viz_boxes_cb').checked) {
           formData.set('viz_boxes', 'on');
         } else {
@@ -423,7 +424,7 @@ def visualize():
           formData.delete('viz_contours');
         }
         formData.set('viz_conf', document.getElementById('viz_conf_slider').value);
-        fetch('/viz_update', {
+        fetch('{{ url_for("viz_update") }}', {
           method: 'POST',
           body: formData
         })
