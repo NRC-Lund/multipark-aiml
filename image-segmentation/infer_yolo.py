@@ -442,8 +442,6 @@ def convert_to_geojson(results, image_shape, contours=None, confidence_mask=None
     Args:
         results: List of dictionaries containing detection results
         image_shape: Tuple of (height, width) of the original image
-        contours: List of contours from sliding window inference (deprecated)
-        confidence_mask: Confidence values for each pixel in the mask (deprecated)
     
     Returns:
         dict: Results in GeoJSON format
@@ -612,9 +610,6 @@ def main():
                 if image is None:
                     raise ValueError(f"Error: Could not load image at {input_image}")
                 
-                contours = None
-                confidence_mask = None
-                
                 # Filter results based on the polygon mask
                 if polygon_mask:
                     all_results = [result for result in results if is_within_polygon(result['box'], polygon_mask)]
@@ -630,13 +625,11 @@ def main():
                     polygon_mask=polygon_mask
                 )
                 image = cv2.imread(input_image)
-                contours = None
-                confidence_mask = None
                 
             # Save results based on flags
             if args.save_geojson:
                 geojson_path = os.path.join(args.output_path, f"{base_name}.geojson")
-                geojson_data = convert_to_geojson(results, image.shape, contours, confidence_mask)
+                geojson_data = convert_to_geojson(results, image.shape)
                 with open(geojson_path, 'w') as f:
                     json.dump(geojson_data, f, indent=2)
                 print(f"GeoJSON results saved to {geojson_path}")
