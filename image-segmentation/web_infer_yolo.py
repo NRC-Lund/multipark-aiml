@@ -430,12 +430,26 @@ def visualize():
         })
         .then(response => response.json())
         .then(data => {
-          let html = '';
           if (data.result_img_url) {
-            html += `<img src="${data.result_img_url}?t=${Date.now()}" id="viz_img">`;
-            html += `<div style=\"font-size:1em;margin-top:12px;\">${data.num_detections} detection${data.num_detections==1?'':'s'} found at this confidence threshold.</div>`;
+            const img = new Image();
+            img.id = "viz_img";
+            img.src = data.result_img_url + "?t=" + Date.now();
+            img.style.width = "100%";
+            img.style.maxWidth = "900px";
+            img.style.borderRadius = "8px";
+            img.style.boxShadow = "0 1px 4px #0002";
+            img.onload = function() {
+              const vizResult = document.getElementById('viz_result');
+              // Replace only the image, keep the detection count
+              const countDiv = vizResult.querySelector('div') || document.createElement('div');
+              countDiv.style.fontSize = "1em";
+              countDiv.style.marginTop = "12px";
+              countDiv.innerHTML = `${data.num_detections} detection${data.num_detections==1?'':'s'} found at this confidence threshold.`;
+              vizResult.innerHTML = '';
+              vizResult.appendChild(img);
+              vizResult.appendChild(countDiv);
+            };
           }
-          document.getElementById('viz_result').innerHTML = html;
         });
       }
       document.getElementById('viz_conf_slider').oninput = function(e) {
