@@ -88,7 +88,7 @@ HTML = '''
     </form>
     {% if uploaded_img %}
       <div style="margin-top:10px; max-width:200px;">
-        <img src="/img-seg/uploads/{{ uploaded_img }}" alt="Preview" style="width:100%; border-radius:4px; box-shadow:0 1px 4px #0002;">
+        <img src="{{ url_for('uploaded_file', filename=uploaded_img) }}" alt="Preview" style="width:100%; border-radius:4px; box-shadow:0 1px 4px #0002;">
       </div>
     {% endif %}
   </div>
@@ -144,7 +144,7 @@ HTML = '''
         <div style="color: #B22222; margin-bottom: 10px;">You have to run inference before visualizing.</div>
       {% endif %}
     {% endif %}
-    <form method="get" action="/visualize">
+    <form method="get" action="{{ url_for('visualize') }}">
       <input type="hidden" name="filename" value="{{ uploaded_img }}">
       <button type="submit" {% if not geojson_exists %}disabled{% endif %}>Visualize</button>
     </form>
@@ -403,7 +403,7 @@ def visualize():
         <input type="hidden" name="filename" value="{{ filename }}">
       </form>
       <div id="viz_result">
-        <img src="/outputs/{{ vis_file }}?t={{ ts }}" id="viz_img">
+        <img src="{{ url_for('output_file', filename=vis_file) }}?t={{ ts }}" id="viz_img">
         <div style="font-size:1em;margin-top:12px;">{{ num_detections }} detection{{ '' if num_detections==1 else 's' }} found at this confidence threshold.</div>
       </div>
       <a href="/" class="back-link">&larr; Back to main page</a>
