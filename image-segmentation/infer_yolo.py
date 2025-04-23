@@ -198,6 +198,7 @@ def run_sliding_window_inference(model_path, image_path, conf_threshold, min_dis
     Returns:
         tuple: (image with detections, combined results)
     """
+
     # Load the model
     model = YOLO(model_path)
     
