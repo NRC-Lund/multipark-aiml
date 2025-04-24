@@ -198,7 +198,6 @@ def run_sliding_window_inference(model_path, image_path, conf_threshold, min_dis
     Returns:
         tuple: (image with detections, combined results)
     """
-
     # Load the model
     model = YOLO(model_path)
     
@@ -288,16 +287,14 @@ def run_sliding_window_inference(model_path, image_path, conf_threshold, min_dis
                 all_results.append(result)
     
 
-    # Remove duplicate detections due to tile overlap
-    # Only keep polygons with at least 4 points (required by shapely)
-    def is_valid_polygon(poly):
-        return poly is not None and hasattr(poly, '__len__') and len(poly) >= 4
-
     # Filter out invalid polygons before NMS
     for result in all_results:
         if result['polygon'] is not None and not is_valid_polygon(result['polygon']):
             result['polygon'] = None
 
+    fused_results = polygon_nms(all_results, iou_thres)
+
+    # Remove duplicate detections due to tile overlap
     fused_results = polygon_nms(all_results, iou_thres)
 
     # Remove close detections
@@ -400,6 +397,10 @@ def is_within_polygon(box, polygon):
     rect = Polygon([(box[0], box[1]), (box[2], box[1]), (box[2], box[3]), (box[0], box[3])])
     return polygon.contains(rect)
 
+def is_valid_polygon(poly):
+    # Only keep polygons with at least 4 points (required by shapely)
+    return poly is not None and hasattr(poly, '__len__') and len(poly) >= 4
+
 def run_inference(model_path, image_path, conf_threshold, min_distance, vis_config: VisualizationConfig = None, polygon_mask=None):
     """
     Run inference using a YOLO model
@@ -452,8 +453,6 @@ def convert_to_geojson(results, image_shape, contours=None, confidence_mask=None
     Args:
         results: List of dictionaries containing detection results
         image_shape: Tuple of (height, width) of the original image
-        contours: List of contours from sliding window inference (deprecated)
-        confidence_mask: Confidence values for each pixel in the mask (deprecated)
     
     Returns:
         dict: Results in GeoJSON format
@@ -622,9 +621,6 @@ def main():
                 if image is None:
                     raise ValueError(f"Error: Could not load image at {input_image}")
                 
-                contours = None
-                confidence_mask = None
-                
                 # Filter results based on the polygon mask
                 if polygon_mask:
                     all_results = [result for result in results if is_within_polygon(result['box'], polygon_mask)]
@@ -640,13 +636,11 @@ def main():
                     polygon_mask=polygon_mask
                 )
                 image = cv2.imread(input_image)
-                contours = None
-                confidence_mask = None
                 
             # Save results based on flags
             if args.save_geojson:
                 geojson_path = os.path.join(args.output_path, f"{base_name}.geojson")
-                geojson_data = convert_to_geojson(results, image.shape, contours, confidence_mask)
+                geojson_data = convert_to_geojson(results, image.shape)
                 with open(geojson_path, 'w') as f:
                     json.dump(geojson_data, f, indent=2)
                 print(f"GeoJSON results saved to {geojson_path}")
