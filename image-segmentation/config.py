@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+import logging
 
 dotenv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
 load_dotenv(dotenv_path)
@@ -22,6 +23,37 @@ class DevelopmentConfig(BaseConfig):
 
 class ProductionConfig(BaseConfig):
     DEBUG = False
+
+def setup_logging(debug=None):
+    """
+    Set up logging configuration based on environment and .env LOG_LEVEL.
+    If debug is True, logs go to stdout at DEBUG level.
+    If debug is False, logs go to file at specified LOG_LEVEL.
+    """
+    log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+    if debug is None:
+        # Default to DevelopmentConfig.DEBUG if not specified
+        debug = getattr(DevelopmentConfig, 'DEBUG', True)
+
+    logger = logging.getLogger()
+    logger.handlers.clear()  # Remove any existing handlers
+
+    formatter = logging.Formatter('[%(asctime)s] %(levelname)s in %(module)s: %(message)s')
+
+    if debug:
+        handler = logging.StreamHandler()
+        handler.setLevel(logging.DEBUG)
+        logger.setLevel(logging.DEBUG)
+    else:
+        log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'outputs', 'app.log')
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        handler = logging.FileHandler(log_file)
+        handler.setLevel(getattr(logging, log_level, logging.INFO))
+        logger.setLevel(getattr(logging, log_level, logging.INFO))
+
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.debug(f"Logging initialized. Debug={debug}, Level={log_level}")
 
 def select_project(workspace, project_arg=None):
     """

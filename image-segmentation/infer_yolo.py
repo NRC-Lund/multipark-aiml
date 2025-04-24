@@ -6,6 +6,8 @@ from dataclasses import dataclass
 import argparse
 import json
 from shapely.geometry import Polygon, shape, Point
+from config import setup_logging
+import logging
 
 @dataclass
 class VisualizationConfig:
@@ -212,7 +214,7 @@ def run_sliding_window_inference(model_path, image_path, conf_threshold, min_dis
     iou_thres = window_config.iou_threshold
     stride = window_size - overlap
     
-    print(f"Running sliding window inference on image {width}x{height} with window size {window_size}, overlap {overlap}, and stride {stride}")
+    logging.info(f"Running sliding window inference on image {width}x{height} with window size {window_size}, overlap {overlap}, and stride {stride}")
 
     # Initialize the output image and mask
     output_image = image.copy()
@@ -520,6 +522,7 @@ def convert_to_geojson(results, image_shape, contours=None, confidence_mask=None
     return geojson
 
 def main():
+    setup_logging()  # Use default (dev) logging unless overridden by .env
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Run YOLO inference on an image or directory of images')
     parser.add_argument('--model', type=str, required=True, help='Path to the YOLO model weights')
@@ -572,21 +575,21 @@ def main():
             if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff'))
         ]
     else:
-        print(f"Error: Input path {args.input_path} does not exist")
+        logging.error(f"Input path {args.input_path} does not exist")
         return
     
     if not input_images:
-        print("Error: No valid input images found")
+        logging.error("No valid input images found")
         return
     
 
     try:
         for input_image in input_images:
-            print(f"\nProcessing {input_image}...")
+            logging.info(f"Processing {input_image}...")
             
             # Get base filename without extension
             base_name = os.path.splitext(os.path.basename(input_image))[0]
-            print("Base name: ",base_name)
+            logging.debug(f"Base name: {base_name}")
             # Load the polygon mask if provided
             polygon_mask = None
             if args.use_geojson_mask:
@@ -595,7 +598,7 @@ def main():
                 # Load the GeoJSON mask
                 polygon_mask = load_geojson_mask(geojson_mask_name)
                 # Print message indicating which GeoJSON file is loaded
-                print(f"Loaded GeoJSON mask from: {geojson_mask_name}")
+                logging.info(f"Loaded GeoJSON mask from: {geojson_mask_name}")
             
             if args.sliding_window:
                 # Create sliding window config
@@ -643,14 +646,14 @@ def main():
                 geojson_data = convert_to_geojson(results, image.shape)
                 with open(geojson_path, 'w') as f:
                     json.dump(geojson_data, f, indent=2)
-                print(f"GeoJSON results saved to {geojson_path}")
+                logging.info(f"GeoJSON results saved to {geojson_path}")
             
             if args.save_image:
                 # Get the file extension from the input image
                 _, ext = os.path.splitext(input_image)
                 image_path = os.path.join(args.output_path, f"{base_name}_detections{ext}")
                 cv2.imwrite(image_path, img_with_detections)
-                print(f"Visualization saved to {image_path}")
+                logging.info(f"Visualization saved to {image_path}")
             
             # Display the image if not disabled
             if not args.no_display:
@@ -660,7 +663,7 @@ def main():
                 cv2.destroyAllWindows()  # Close all windows
             
     except Exception as e:
-        print(f"Error processing image: {str(e)}")
+        logging.error(f"Error processing image: {str(e)}", exc_info=True)
         raise  # This will show the full traceback
 
 if __name__ == "__main__":

@@ -10,7 +10,8 @@ import numpy as np
 import json
 import datetime
 from dotenv import load_dotenv
-from config import DevelopmentConfig, ProductionConfig
+from config import DevelopmentConfig, ProductionConfig, setup_logging
+import logging
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
@@ -22,17 +23,19 @@ app.secret_key = os.getenv('SECRET_KEY', 'your_secret_key')  # Fallback for safe
 # Choose config based on environment variable
 if os.getenv('FLASK_ENV') == 'production':
     app.config.from_object(ProductionConfig)
+    setup_logging(debug=False)
 else:
     app.config.from_object(DevelopmentConfig)
+    setup_logging(debug=True)
 
 UPLOAD_FOLDER = app.config['UPLOAD_FOLDER']
 OUTPUT_FOLDER = app.config['OUTPUT_FOLDER']
 MODEL_FOLDER = app.config['MODEL_FOLDER']
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'bmp', 'tif', 'tiff'}
 
-print(f"Upload folder: {UPLOAD_FOLDER}")
-print(f"Output folder: {OUTPUT_FOLDER}")
-print(f"Model folder: {MODEL_FOLDER}")
+logging.info(f"Upload folder: {UPLOAD_FOLDER}")
+logging.info(f"Output folder: {OUTPUT_FOLDER}")
+logging.info(f"Model folder: {MODEL_FOLDER}")
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
@@ -261,7 +264,7 @@ def upload_and_infer():
             base, ext = os.path.splitext(filename)
             geojson_file = os.path.join(output_path, f'{base}.geojson')
             # Always run inference with conf=0.1
-            print(model_path)
+            logging.info(f"Running inference with model: {model_path}")
             cmd = [
                 sys.executable,
                 'infer_yolo.py',
