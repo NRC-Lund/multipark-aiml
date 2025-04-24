@@ -12,7 +12,7 @@ import datetime
 from dotenv import load_dotenv
 from config import DevelopmentConfig, ProductionConfig
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
 app = Flask(__name__)
 
@@ -29,6 +29,10 @@ UPLOAD_FOLDER = app.config['UPLOAD_FOLDER']
 OUTPUT_FOLDER = app.config['OUTPUT_FOLDER']
 MODEL_FOLDER = app.config['MODEL_FOLDER']
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'bmp', 'tif', 'tiff'}
+
+print(f"Upload folder: {UPLOAD_FOLDER}")
+print(f"Output folder: {OUTPUT_FOLDER}")
+print(f"Model folder: {MODEL_FOLDER}")
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
