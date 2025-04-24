@@ -289,6 +289,15 @@ def run_sliding_window_inference(model_path, image_path, conf_threshold, min_dis
     
 
     # Remove duplicate detections due to tile overlap
+    # Only keep polygons with at least 4 points (required by shapely)
+    def is_valid_polygon(poly):
+        return poly is not None and hasattr(poly, '__len__') and len(poly) >= 4
+
+    # Filter out invalid polygons before NMS
+    for result in all_results:
+        if result['polygon'] is not None and not is_valid_polygon(result['polygon']):
+            result['polygon'] = None
+
     fused_results = polygon_nms(all_results, iou_thres)
 
     # Remove close detections
