@@ -287,6 +287,13 @@ def run_sliding_window_inference(model_path, image_path, conf_threshold, min_dis
                 all_results.append(result)
     
 
+    # Filter out invalid polygons before NMS
+    for result in all_results:
+        if result['polygon'] is not None and not is_valid_polygon(result['polygon']):
+            result['polygon'] = None
+
+    fused_results = polygon_nms(all_results, iou_thres)
+
     # Remove duplicate detections due to tile overlap
     fused_results = polygon_nms(all_results, iou_thres)
 
@@ -389,6 +396,10 @@ def is_within_polygon(box, polygon):
     # Create a rectangle from the bounding box
     rect = Polygon([(box[0], box[1]), (box[2], box[1]), (box[2], box[3]), (box[0], box[3])])
     return polygon.contains(rect)
+
+def is_valid_polygon(poly):
+    # Only keep polygons with at least 4 points (required by shapely)
+    return poly is not None and hasattr(poly, '__len__') and len(poly) >= 4
 
 def run_inference(model_path, image_path, conf_threshold, min_distance, vis_config: VisualizationConfig = None, polygon_mask=None):
     """
