@@ -9,16 +9,26 @@ import cv2
 import numpy as np
 import json
 import datetime
+from dotenv import load_dotenv
+from config import DevelopmentConfig, ProductionConfig
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
-OUTPUT_FOLDER = os.path.join(BASE_DIR, 'outputs')
+load_dotenv()
+
+app = Flask(__name__)
+
+# Set secret key from environment variable
+app.secret_key = os.getenv('SECRET_KEY', 'your_secret_key')  # Fallback for safety
+
+# Choose config based on environment variable
+if os.getenv('FLASK_ENV') == 'production':
+    app.config.from_object(ProductionConfig)
+else:
+    app.config.from_object(DevelopmentConfig)
+
+UPLOAD_FOLDER = app.config['UPLOAD_FOLDER']
+OUTPUT_FOLDER = app.config['OUTPUT_FOLDER']
+MODEL_FOLDER = app.config['MODEL_FOLDER']
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'bmp', 'tif', 'tiff'}
-
-app = Flask(__name__, static_url_path='/img-seg/static')
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['OUTPUT_FOLDER'] = OUTPUT_FOLDER
-app.secret_key = 'your_secret_key'  # Needed for session
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
@@ -166,7 +176,10 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def get_default_model_path():
-    return os.path.join(BASE_DIR, 'models', 'th-stained-dopamine-neurons-v3-medium.pt')
+    return os.path.join(MODEL_FOLDER, 'th-stained-dopamine-neurons-v3-medium.pt')
+
+def get_model_paths():
+    return [os.path.join(MODEL_FOLDER, fname) for fname in os.listdir(MODEL_FOLDER) if fname.endswith('.pt')]
 
 def get_uploaded_files():
     files = []
@@ -174,10 +187,6 @@ def get_uploaded_files():
         if allowed_file(fname):
             files.append(fname)
     return sorted(files)
-
-def get_model_paths():
-    model_dir = os.path.join(BASE_DIR, 'models')
-    return [os.path.join(model_dir, fname) for fname in os.listdir(model_dir) if fname.endswith('.pt')]
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_and_infer():
@@ -250,7 +259,7 @@ def upload_and_infer():
             # Always run inference with conf=0.1
             print(model_path)
             cmd = [
-                '/srv/data/Resources/Python/anaconda3/envs/multipark-web/bin/python',
+                sys.executable,
                 'infer_yolo.py',
                 '--model', model_path,
                 '--input-path', input_path,
@@ -319,11 +328,11 @@ def upload_and_infer():
 
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
-    return redirect(f"/img-seg/uploads/{filename}")
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 @app.route('/outputs/<filename>')
 def output_file(filename):
-    return redirect(f"/img-seg/outputs/{filename}")
+    return send_from_directory(app.config['OUTPUT_FOLDER'], filename)
 
 @app.route('/viz_update', methods=['POST'])
 def viz_update():
@@ -406,7 +415,7 @@ def visualize():
         <img src="{{ url_for('output_file', filename=vis_file) }}?t={{ ts }}" id="viz_img">
         <div style="font-size:1em;margin-top:12px;">{{ num_detections }} detection{{ '' if num_detections==1 else 's' }} found at this confidence threshold.</div>
       </div>
-      <a href="/img-seg" class="back-link">&larr; Back to main page</a>
+      <a href="{{ url_for('upload_and_infer') }}" class="back-link">&larr; Back to main page</a>
     </div>
     <script>
       function sendVizAjax() {

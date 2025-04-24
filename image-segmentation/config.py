@@ -9,6 +9,19 @@ def get_env_var(name, required=True, default=None):
         raise RuntimeError(f"Missing required environment variable: {name}")
     return value
 
+class BaseConfig:
+    SECRET_KEY = get_env_var('SECRET_KEY', required=True, default='dev')
+    UPLOAD_FOLDER = get_env_var('UPLOAD_FOLDER', required=False, default='uploads')
+    OUTPUT_FOLDER = get_env_var('OUTPUT_FOLDER', required=False, default='outputs')
+    MODEL_FOLDER = get_env_var('MODEL_FOLDER', required=False, default='models')
+    # Add more as needed
+
+class DevelopmentConfig(BaseConfig):
+    DEBUG = True
+
+class ProductionConfig(BaseConfig):
+    DEBUG = False
+
 def select_project(workspace, project_arg=None):
     """
     Select a project from the Roboflow workspace, either from argument or interactively.
