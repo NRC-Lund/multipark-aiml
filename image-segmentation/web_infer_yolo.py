@@ -28,6 +28,7 @@ else:
     app.config.from_object(DevelopmentConfig)
     setup_logging(debug=True)
 
+PYTHON_EXECUTABLE = app.config.get('PYTHON_EXECUTABLE', sys.executable)
 UPLOAD_FOLDER = app.config['UPLOAD_FOLDER']
 OUTPUT_FOLDER = app.config['OUTPUT_FOLDER']
 MODEL_FOLDER = app.config['MODEL_FOLDER']
@@ -266,7 +267,7 @@ def upload_and_infer():
             # Always run inference with conf=0.1
             logging.info(f"Running inference with model: {model_path}")
             cmd = [
-                sys.executable,
+                PYTHON_EXECUTABLE,
                 'infer_yolo.py',
                 '--model', model_path,
                 '--input-path', input_path,

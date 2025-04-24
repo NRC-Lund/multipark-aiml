@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 import logging
+import sys
 
 dotenv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
 load_dotenv(dotenv_path)
@@ -16,6 +17,7 @@ class BaseConfig:
     UPLOAD_FOLDER = get_env_var('UPLOAD_FOLDER', required=False, default='uploads')
     OUTPUT_FOLDER = get_env_var('OUTPUT_FOLDER', required=False, default='outputs')
     MODEL_FOLDER = get_env_var('MODEL_FOLDER', required=False, default='models')
+    PYTHON_EXECUTABLE = get_env_var('PYTHON_EXECUTABLE', required=False, default=sys.executable)
     # Add more as needed
 
 class DevelopmentConfig(BaseConfig):
