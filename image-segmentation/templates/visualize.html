@@ -1,0 +1,98 @@
+<!doctype html>
+<title>Visualization</title>
+<style>
+  body { font-family: sans-serif; margin: 0; background: #f5f5f5; }
+  .container { max-width: 900px; margin: 40px auto; background: #fff; padding: 32px; border-radius: 8px; box-shadow: 0 2px 8px #0001; }
+  .section-title { font-size: 1.2em; font-weight: bold; margin-bottom: 12px; }
+  img { width: 100%; max-width: 900px; border-radius: 8px; box-shadow: 0 1px 4px #0002; }
+  .slider-label { display: flex; align-items: center; gap: 12px; margin: 16px 0; }
+  .checkbox-group { display: flex; gap: 24px; margin: 16px 0; }
+  .inference-feedback { text-align: center; margin-top: 12px; font-size: 1.1em; color: #007bff; }
+  .back-link { margin-top: 24px; display: block; }
+</style>
+<div class="container">
+  <div class="section-title">Visualization for: {{ filename }}</div>
+  <form id="vizForm">
+    <div class="slider-label">
+      <label for="viz_conf_slider">Confidence threshold:</label>
+      <input type="range" min="0" max="1" step="0.01" value="{{ viz_conf }}" id="viz_conf_slider" name="viz_conf">
+      <span id="viz_conf_val">{{ viz_conf }}</span>
+    </div>
+    <div class="checkbox-group">
+      <label><input type="checkbox" id="viz_boxes_cb" name="viz_boxes" {% if viz_boxes %}checked{% endif %}> Show boxes</label>
+      <label><input type="checkbox" id="viz_contours_cb" name="viz_contours" {% if viz_contours %}checked{% endif %}> Show contours</label>
+    </div>
+    <input type="hidden" name="filename" value="{{ filename }}">
+  </form>
+  <div id="viz_result">
+    <img src="{{ url_for('output_file', filename=vis_file) }}?t={{ ts }}" id="viz_img">
+    <div style="font-size:1em;margin-top:12px;">{{ num_detections }} detection{{ '' if num_detections==1 else 's' }} found at this confidence threshold.</div>
+  </div>
+  <a href="{{ url_for('upload_and_infer') }}" class="back-link">&larr; Back to main page</a>
+</div>
+<script>
+  function sendVizAjax() {
+    const form = document.getElementById('vizForm');
+    const formData = new FormData(form);
+    formData.set('filename', '{{ filename }}'); // Ensure filename is always sent
+    if (document.getElementById('viz_boxes_cb').checked) {
+      formData.set('viz_boxes', 'on');
+    } else {
+      formData.delete('viz_boxes');
+    }
+    if (document.getElementById('viz_contours_cb').checked) {
+      formData.set('viz_contours', 'on');
+    } else {
+      formData.delete('viz_contours');
+    }
+    formData.set('viz_conf', document.getElementById('viz_conf_slider').value);
+    fetch('{{ url_for("viz_update") }}', {
+      method: 'POST',
+      body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.result_img_url) {
+        const img = new Image();
+        img.id = "viz_img";
+        img.src = data.result_img_url + "?t=" + Date.now();
+        img.style.width = "100%";
+        img.style.maxWidth = "900px";
+        img.style.borderRadius = "8px";
+        img.style.boxShadow = "0 1px 4px #0002";
+        img.onload = function() {
+          const vizResult = document.getElementById('viz_result');
+          // Replace only the image, keep the detection count
+          const countDiv = vizResult.querySelector('div') || document.createElement('div');
+          countDiv.style.fontSize = "1em";
+          countDiv.style.marginTop = "12px";
+          countDiv.innerHTML = `${data.num_detections} detection${data.num_detections==1?'':'s'} found at this confidence threshold.`;
+          vizResult.innerHTML = '';
+          vizResult.appendChild(img);
+          vizResult.appendChild(countDiv);
+        };
+      }
+    });
+  }
+  document.getElementById('viz_conf_slider').oninput = function(e) {
+    document.getElementById('viz_conf_val').innerText = this.value;
+  };
+  document.getElementById('viz_conf_slider').addEventListener('change', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    sendVizAjax();
+    return false;
+  });
+  document.getElementById('viz_boxes_cb').addEventListener('change', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    sendVizAjax();
+    return false;
+  });
+  document.getElementById('viz_contours_cb').addEventListener('change', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    sendVizAjax();
+    return false;
+  });
+</script>

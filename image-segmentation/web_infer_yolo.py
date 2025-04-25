@@ -1,7 +1,7 @@
 # Minimal Flask web app for infer_yolo
 import os
 import sys
-from flask import Flask, request, render_template_string, send_from_directory, redirect, url_for, session, jsonify
+from flask import Flask, request, render_template, send_from_directory, redirect, url_for, session, jsonify
 import subprocess
 from werkzeug.utils import secure_filename
 import matplotlib.pyplot as plt
@@ -40,145 +40,6 @@ logging.info(f"Model folder: {MODEL_FOLDER}")
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
-
-HTML = '''
-<!doctype html>
-<title>YOLO Inference Web</title>
-<style>
-  body { font-family: sans-serif; margin: 0; background: #f5f5f5; }
-  .container { max-width: 900px; margin: 30px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #0001; padding: 32px; }
-  .section { margin-bottom: 32px; }
-  .section-title { font-size: 1.2em; font-weight: bold; margin-bottom: 12px; }
-  .row { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-end; }
-  .col { flex: 1 1 0; min-width: 200px; }
-  img { width: 100%; max-width: 900px; border-radius: 8px; box-shadow: 0 1px 4px #0002; }
-  form { margin-bottom: 0; }
-  label { font-weight: 500; }
-  input[type=range] { width: 80%; }
-  .slider-label { display: flex; align-items: center; gap: 12px; margin: 16px 0; }
-  fieldset:disabled { opacity: 0.5; }
-  .spinner {
-    display: none;
-    margin: 0 auto;
-    border: 6px solid #f3f3f3;
-    border-top: 6px solid #007bff;
-    border-radius: 50%;
-    width: 36px;
-    height: 36px;
-    animation: spin 1s linear infinite;
-  }
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-  .inference-feedback {
-    text-align: center;
-    margin-top: 12px;
-    font-size: 1.1em;
-    color: #007bff;
-  }
-</style>
-<div class="container">
-  <!-- File selection/upload section -->
-  <div class="section">
-    <div class="section-title">1. Image files</div>
-    <form method=post enctype=multipart/form-data style="margin-bottom:12px;" id="uploadForm">
-      <label for="fileInput">Upload a file:</label>
-      <input type=file name=file accept="image/*" id="fileInput">
-      <input type=submit value="Upload New Image" id="uploadBtn" style="display:none;">
-    </form>
-    <script>
-      document.getElementById('fileInput').addEventListener('change', function() {
-        if (this.value) {
-          document.getElementById('uploadForm').submit();
-        }
-      });
-    </script>
-    <form method=post id="fileSelectForm" style="display:inline;">
-      <label for="file_select">Or select an already uploaded file:</label>
-      <select name="filename" id="file_select" onchange="this.form.submit()">
-        <option value="">-- Select file --</option>
-        {% for fname in uploaded_files %}
-          <option value="{{ fname }}" {% if fname == uploaded_img %}selected{% endif %}>{{ fname }}</option>
-        {% endfor %}
-      </select>
-      <button type="submit" name="delete_file" value="1" onclick="return confirm('Are you sure you want to delete this file?');" {% if not uploaded_img %}disabled{% endif %}>Delete selected file</button>
-    </form>
-    {% if uploaded_img %}
-      <div style="margin-top:10px; max-width:200px;">
-        <img src="{{ url_for('uploaded_file', filename=uploaded_img) }}" alt="Preview" style="width:100%; border-radius:4px; box-shadow:0 1px 4px #0002;">
-      </div>
-    {% endif %}
-  </div>
-
-  <!-- Inference options section -->
-  <div class="section">
-    <div class="section-title">2. Inference Options</div>
-    <form method=post id="inferForm">
-      <input type="hidden" name="filename" value="{{ uploaded_img }}">
-      <div class="row">
-        <div class="col">
-          <label>Model:</label>
-          <select name="model_path" style="width:100%">
-            {% for mpath in model_paths %}
-              <option value="{{ mpath }}" {% if mpath == model_path %}selected{% endif %}>{{ mpath.split('/')[-1] }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col">
-          <label><input type="checkbox" name="sliding_window" {% if sliding_window %}checked{% endif %}> Sliding Window</label>
-        </div>
-        <div class="col">
-          <label>IOU Threshold:</label><br>
-          <input type="number" name="iou_thres" min="0" max="1" step="0.01" value="{{ iou_thres }}">
-        </div>
-        <div class="col">
-          <label>Min Distance:</label><br>
-          <input type="number" name="min_dist" min="0" step="1" value="{{ min_dist }}">
-        </div>
-        <div class="col">
-          <input type="submit" name="run_infer" value="Run inference on selected image">
-        </div>
-      </div>
-      <div class="inference-feedback" id="inferenceFeedback">
-        <div class="spinner" id="spinner"></div>
-        <span id="inferenceMsg"></span>
-      </div>
-    </form>
-  </div>
-
-  <!-- Visualization section -->
-  <div class="section">
-    <div class="section-title">3. Visualization</div>
-    {% if uploaded_img %}
-      {% if geojson_exists %}
-        <div style="color: #228B22; margin-bottom: 10px;">
-          Inference has been calculated for this image.<br>
-          <span style="font-size:0.95em; color:#555;">
-            Timestamp: {{ geojson_timestamp }}
-          </span>
-        </div>
-      {% else %}
-        <div style="color: #B22222; margin-bottom: 10px;">You have to run inference before visualizing.</div>
-      {% endif %}
-    {% endif %}
-    <form method="get" action="{{ url_for('visualize') }}">
-      <input type="hidden" name="filename" value="{{ uploaded_img }}">
-      <button type="submit" {% if not geojson_exists %}disabled{% endif %}>Visualize</button>
-    </form>
-  </div>
-</div>
-<script>
-  document.getElementById('inferForm').addEventListener('submit', function() {
-    document.getElementById('spinner').style.display = 'inline-block';
-    document.getElementById('inferenceMsg').textContent = 'Running inference, please wait...';
-  });
-  window.onload = function() {
-    document.getElementById('spinner').style.display = 'none';
-    document.getElementById('inferenceMsg').textContent = '';
-  };
-</script>
-'''
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -237,8 +98,8 @@ def upload_and_infer():
                 uploaded_img = None
                 uploaded_files = get_uploaded_files()
                 # Early return to refresh page after deletion
-                return render_template_string(
-                    HTML,
+                return render_template(
+                    'index.html',
                     uploaded_img=uploaded_img,
                     result_img=None,
                     conf=viz_conf,
@@ -314,8 +175,8 @@ def upload_and_infer():
                 show_boxes=viz_boxes, show_contours=viz_contours, show_masks=viz_masks
             )
             result_img = vis_file
-    return render_template_string(
-        HTML,
+    return render_template(
+        'index.html',
         uploaded_img=uploaded_img,
         result_img=result_img,
         conf=viz_conf,
@@ -392,121 +253,23 @@ def visualize():
     viz_boxes = request.args.get('viz_boxes', '1') == '1'
     viz_contours = request.args.get('viz_contours', '1') == '1'
     viz_masks = False
-    return render_template_string('''
-    <!doctype html>
-    <title>Visualization</title>
-    <style>
-      body { font-family: sans-serif; margin: 0; background: #f5f5f5; }
-      .container { max-width: 900px; margin: 40px auto; background: #fff; padding: 32px; border-radius: 8px; box-shadow: 0 2px 8px #0001; }
-      .section-title { font-size: 1.2em; font-weight: bold; margin-bottom: 12px; }
-      img { width: 100%; max-width: 900px; border-radius: 8px; box-shadow: 0 1px 4px #0002; }
-      .slider-label { display: flex; align-items: center; gap: 12px; margin: 16px 0; }
-      .checkbox-group { display: flex; gap: 24px; margin: 16px 0; }
-      .inference-feedback { text-align: center; margin-top: 12px; font-size: 1.1em; color: #007bff; }
-      .back-link { margin-top: 24px; display: block; }
-    </style>
-    <div class="container">
-      <div class="section-title">Visualization for: {{ filename }}</div>
-      <form id="vizForm">
-        <div class="slider-label">
-          <label for="viz_conf_slider">Confidence threshold:</label>
-          <input type="range" min="0" max="1" step="0.01" value="{{ viz_conf }}" id="viz_conf_slider" name="viz_conf">
-          <span id="viz_conf_val">{{ viz_conf }}</span>
-        </div>
-        <div class="checkbox-group">
-          <label><input type="checkbox" id="viz_boxes_cb" name="viz_boxes" {% if viz_boxes %}checked{% endif %}> Show boxes</label>
-          <label><input type="checkbox" id="viz_contours_cb" name="viz_contours" {% if viz_contours %}checked{% endif %}> Show contours</label>
-        </div>
-        <input type="hidden" name="filename" value="{{ filename }}">
-      </form>
-      <div id="viz_result">
-        <img src="{{ url_for('output_file', filename=vis_file) }}?t={{ ts }}" id="viz_img">
-        <div style="font-size:1em;margin-top:12px;">{{ num_detections }} detection{{ '' if num_detections==1 else 's' }} found at this confidence threshold.</div>
-      </div>
-      <a href="{{ url_for('upload_and_infer') }}" class="back-link">&larr; Back to main page</a>
-    </div>
-    <script>
-      function sendVizAjax() {
-        const form = document.getElementById('vizForm');
-        const formData = new FormData(form);
-        formData.set('filename', '{{ filename }}'); // Ensure filename is always sent
-        if (document.getElementById('viz_boxes_cb').checked) {
-          formData.set('viz_boxes', 'on');
-        } else {
-          formData.delete('viz_boxes');
-        }
-        if (document.getElementById('viz_contours_cb').checked) {
-          formData.set('viz_contours', 'on');
-        } else {
-          formData.delete('viz_contours');
-        }
-        formData.set('viz_conf', document.getElementById('viz_conf_slider').value);
-        fetch('{{ url_for("viz_update") }}', {
-          method: 'POST',
-          body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-          if (data.result_img_url) {
-            const img = new Image();
-            img.id = "viz_img";
-            img.src = data.result_img_url + "?t=" + Date.now();
-            img.style.width = "100%";
-            img.style.maxWidth = "900px";
-            img.style.borderRadius = "8px";
-            img.style.boxShadow = "0 1px 4px #0002";
-            img.onload = function() {
-              const vizResult = document.getElementById('viz_result');
-              // Replace only the image, keep the detection count
-              const countDiv = vizResult.querySelector('div') || document.createElement('div');
-              countDiv.style.fontSize = "1em";
-              countDiv.style.marginTop = "12px";
-              countDiv.innerHTML = `${data.num_detections} detection${data.num_detections==1?'':'s'} found at this confidence threshold.`;
-              vizResult.innerHTML = '';
-              vizResult.appendChild(img);
-              vizResult.appendChild(countDiv);
-            };
-          }
-        });
-      }
-      document.getElementById('viz_conf_slider').oninput = function(e) {
-        document.getElementById('viz_conf_val').innerText = this.value;
-      };
-      document.getElementById('viz_conf_slider').addEventListener('change', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        sendVizAjax();
-        return false;
-      });
-      document.getElementById('viz_boxes_cb').addEventListener('change', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        sendVizAjax();
-        return false;
-      });
-      document.getElementById('viz_contours_cb').addEventListener('change', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        sendVizAjax();
-        return false;
-      });
-    </script>
-    ''',
-    filename=filename,
-    vis_file=vis_file,
-    viz_conf=viz_conf,
-    viz_boxes=viz_boxes,
-    viz_contours=viz_contours,
-    num_detections=plot_detections(
-        os.path.join(app.config['UPLOAD_FOLDER'], filename),
-        geojson_file,
-        vis_path,
-        viz_conf,
-        show_boxes=viz_boxes,
-        show_contours=viz_contours,
-        show_masks=viz_masks
-    ),
-    ts=int(os.path.getmtime(vis_path))
+    return render_template(
+        'visualize.html',
+        filename=filename,
+        vis_file=vis_file,
+        viz_conf=viz_conf,
+        viz_boxes=viz_boxes,
+        viz_contours=viz_contours,
+        num_detections=plot_detections(
+            os.path.join(app.config['UPLOAD_FOLDER'], filename),
+            geojson_file,
+            vis_path,
+            viz_conf,
+            show_boxes=viz_boxes,
+            show_contours=viz_contours,
+            show_masks=viz_masks
+        ),
+        ts=int(os.path.getmtime(vis_path))
     )
 
 def plot_detections(image_path, geojson_path, out_path, conf_threshold=0.3, show_boxes=True, show_contours=True, show_masks=True):
