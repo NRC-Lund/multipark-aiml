@@ -11,6 +11,7 @@
   .back-link { margin-top: 24px; display: block; }
 </style>
 <div class="container">
+  <a href="{{ url_for('upload_and_infer') }}" class="back-link" style="margin-bottom:24px;display:block;">&larr; Back to main page</a>
   <div class="section-title">Visualization for: {{ filename }}</div>
   <form id="vizForm">
     <div class="slider-label">
@@ -28,7 +29,6 @@
     <img src="{{ url_for('output_file', filename=vis_file) }}?t={{ ts }}" id="viz_img">
     <div style="font-size:1em;margin-top:12px;">{{ num_detections }} detection{{ '' if num_detections==1 else 's' }} found at this confidence threshold.</div>
   </div>
-  <a href="{{ url_for('upload_and_infer') }}" class="back-link">&larr; Back to main page</a>
 </div>
 <script>
   function sendVizAjax() {
